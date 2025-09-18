@@ -1,0 +1,22 @@
+{
+  "placeholderImages": [
+    {
+      "id": "dashboard-chart",
+      "description": "A financial chart.",
+      "imageUrl": "https://picsum.photos/seed/chart1/600/400",
+      "imageHint": "financial chart"
+    },
+    {
+      "id": "dashboard-journal",
+      "description": "A journal notebook.",
+      "imageUrl": "https://picsum.photos/seed/journal1/600/400",
+      "imageHint": "journal notebook"
+    },
+    {
+      "id": "dashboard-admin",
+      "description": "Admin panel with settings.",
+      "imageUrl": "https://picsum.photos/seed/admin1/600/400",
+      "imageHint": "server settings"
+    }
+  ]
+}
