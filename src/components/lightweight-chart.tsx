@@ -6,28 +6,32 @@ import {
   IChartApi,
   ISeriesApi,
   UTCTimestamp,
-  PriceLineOptions,
   LineStyle,
+  ColorType,
 } from 'lightweight-charts';
+import type { Overlay, Instrument } from '@/types/market';
+
 
 interface ChartProps {
   candlestickData: { time: UTCTimestamp; open: number; high: number; low: number; close: number }[];
   volumeData: { time: UTCTimestamp; value: number; color: string }[];
-  overlays?: any[];
+  overlays?: Overlay[];
+  instrument: Instrument | null;
 }
 
-export function LightweightChart({ candlestickData, volumeData, overlays = [] }: ChartProps) {
+export function LightweightChart({ candlestickData, volumeData, overlays = [], instrument }: ChartProps) {
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const candlestickSeriesRef = useRef<ISeriesApi<'Candlestick'> | null>(null);
   const volumeSeriesRef = useRef<ISeriesApi<'Histogram'> | null>(null);
+  const priceLinesRef = useRef<any[]>([]);
 
   useEffect(() => {
     if (!chartContainerRef.current) return;
 
     chartRef.current = createChart(chartContainerRef.current, {
       layout: {
-        background: { color: 'hsl(var(--background))' },
+        background: { type: ColorType.Solid, color: 'hsl(var(--card))' },
         textColor: 'hsl(var(--foreground))',
       },
       grid: {
@@ -60,11 +64,11 @@ export function LightweightChart({ candlestickData, volumeData, overlays = [] }:
       priceFormat: {
         type: 'volume',
       },
-      priceScaleId: '', // Show on a separate pane
+      priceScaleId: '',
     });
     chartRef.current.priceScale('').applyOptions({
       scaleMargins: {
-        top: 0.8, // 80% of the pane for volume
+        top: 0.8,
         bottom: 0,
       },
     });
@@ -93,21 +97,22 @@ export function LightweightChart({ candlestickData, volumeData, overlays = [] }:
     chartRef.current?.timeScale().fitContent();
 
     // Clear previous overlays
-    candlestickSeriesRef.current?.getPrerenderedData().priceLines.forEach(line => candlestickSeriesRef.current?.removePriceLine(line));
-
+    priceLinesRef.current.forEach(line => candlestickSeriesRef.current?.removePriceLine(line));
+    priceLinesRef.current = [];
 
     // Draw new overlays
-    if (candlestickSeriesRef.current) {
+    if (candlestickSeriesRef.current && instrument) {
       for (const overlay of overlays) {
         if (overlay.type === 'position') {
-          const { entry, stop, target, note } = overlay;
+          const { entry, stop, target, note, qty = 1, showRR = true } = overlay;
           const risk = Math.abs(entry - stop);
           const reward = Math.abs(target - entry);
           const rr = reward / risk;
+          const riskDollars = qty * risk * instrument.pointValue;
 
           const createLine = (price: number, color: string, title: string, lineStyle: LineStyle = LineStyle.Dashed) => {
             if (candlestickSeriesRef.current) {
-              return candlestickSeriesRef.current.createPriceLine({
+                const line = candlestickSeriesRef.current.createPriceLine({
                 price: price,
                 color: color,
                 lineWidth: 2,
@@ -115,6 +120,8 @@ export function LightweightChart({ candlestickData, volumeData, overlays = [] }:
                 axisLabelVisible: true,
                 title: title,
               });
+              priceLinesRef.current.push(line);
+              return line;
             }
           };
 
@@ -122,19 +129,26 @@ export function LightweightChart({ candlestickData, volumeData, overlays = [] }:
           createLine(stop, 'hsl(var(--destructive))', ` Stop: ${stop}`);
           createLine(target, 'hsl(var(--chart-2))', ` Target: ${target}`);
           
-          if (overlay.showRR && candlestickSeriesRef.current) {
-            candlestickSeriesRef.current.createPriceLine({
+          if (showRR && candlestickSeriesRef.current) {
+            const labelContent = [
+                note,
+                `R/R: ${rr.toFixed(2)}`,
+                `$Risk: ${riskDollars.toFixed(2)}`
+            ].filter(Boolean).join(' | ');
+
+            const labelLine = candlestickSeriesRef.current.createPriceLine({
                 price: entry + (target > entry ? reward * 1.2 : -reward * 1.2), // Position label slightly away
                 color: 'transparent', // Invisible line
                 axisLabelVisible: false,
-                title: `${note ? note + ' ' : ''}(R/R: ${rr.toFixed(2)})`,
+                title: labelContent,
             });
+            priceLinesRef.current.push(labelLine);
           }
         }
       }
     }
 
-  }, [candlestickData, volumeData, overlays]);
+  }, [candlestickData, volumeData, overlays, instrument]);
 
   return <div ref={chartContainerRef} className="h-full w-full" />;
 }

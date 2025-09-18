@@ -1,0 +1,4 @@
+[
+  { "symbol": "MES", "tickSize": 0.25, "pointValue": 5, "display": "Micro E-mini S&P 500" },
+  { "symbol": "MGC", "tickSize": 0.1, "pointValue": 10, "display": "Micro Gold" }
+]

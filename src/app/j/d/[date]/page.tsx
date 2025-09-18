@@ -9,10 +9,10 @@ import {
   CardTitle,
 } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { journalEntries } from '@/lib/mock-data';
-import { notFound } from 'next/navigation';
-import { Wand2 } from 'lucide-react';
-import { useState } from 'react';
+import { notFound, useParams } from 'next/navigation';
+import { Wand2, Link as LinkIcon } from 'lucide-react';
+import Link from 'next/link';
+import { useEffect, useState } from 'react';
 import {
   Dialog,
   DialogContent,
@@ -23,25 +23,44 @@ import {
 import { Skeleton } from '@/components/ui/skeleton';
 import { generateJournalSummary } from '@/ai/flows/generate-journal-summary';
 
-export default function DailyJournalPage({ params }: { params: { date: string } }) {
+export default function DailyJournalPage() {
+  const params = useParams<{ date: string }>();
   const [isSummaryOpen, setIsSummaryOpen] = useState(false);
   const [summary, setSummary] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [journal, setJournal] = useState<{ body_md: string, rendered_html: string, links: string[] } | null>(null);
+  const [loadingJournal, setLoadingJournal] = useState(true);
 
-  const entry = journalEntries.find(
-    (e) => e.type === 'daily' && e.path.endsWith(params.date)
-  );
+  useEffect(() => {
+    if (!params.date) return;
+    setLoadingJournal(true);
+    fetch(`/api/journal/d/${params.date}`)
+      .then(res => {
+        if (!res.ok) throw new Error('not found');
+        return res.json();
+      })
+      .then(data => {
+        setJournal(data);
+      })
+      .catch(() => setJournal(null))
+      .finally(() => setLoadingJournal(false));
+  }, [params.date]);
 
-  if (!entry) {
+  if (loadingJournal) {
+    return <Skeleton className="h-96 w-full" />;
+  }
+
+  if (!journal) {
     notFound();
   }
 
   const handleGenerateSummary = async () => {
+    if (!journal) return;
     setIsSummaryOpen(true);
     setIsLoading(true);
     setSummary('');
     try {
-      const result = await generateJournalSummary({ journalEntry: entry.content });
+      const result = await generateJournalSummary({ journalEntry: journal.body_md });
       setSummary(result.summary);
     } catch (error) {
       console.error('Failed to generate summary:', error);
@@ -54,8 +73,8 @@ export default function DailyJournalPage({ params }: { params: { date: string } 
   return (
     <div className="space-y-6">
       <header>
-        <h1 className="text-3xl font-bold font-headline tracking-tight">{entry.title}</h1>
-        <p className="text-muted-foreground">Date: {entry.date}</p>
+        <h1 className="text-3xl font-bold font-headline tracking-tight">Daily Journal: {params.date}</h1>
+        <p className="text-muted-foreground">Date: {params.date}</p>
       </header>
       <Card>
         <CardHeader>
@@ -65,30 +84,31 @@ export default function DailyJournalPage({ params }: { params: { date: string } 
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="prose prose-invert max-w-none font-body">
-            <style jsx global>{`
-              .prose h2 { @apply text-2xl font-bold mt-8 mb-4 font-headline; }
-              .prose h3 { @apply text-xl font-bold mt-6 mb-3 font-headline; }
-              .prose p { @apply leading-relaxed mb-4; }
-              .prose ul { @apply list-disc pl-5 mb-4; }
-              .prose code { @apply bg-muted text-foreground px-1 py-0.5 rounded font-code; }
-              .prose blockquote { @apply border-l-4 border-primary pl-4 italic text-muted-foreground; }
-            `}</style>
-            {entry.content.split('\n').map((line, i) => {
-              if (line.startsWith('## ')) return <h2 key={i}>{line.substring(3)}</h2>;
-              if (line.startsWith('### ')) return <h3 key={i}>{line.substring(4)}</h3>;
-              if (line.startsWith('> ')) return <blockquote key={i}>{line.substring(2)}</blockquote>;
-              if (line.startsWith('- ')) return <ul key={i}><li>{line.substring(2)}</li></ul>; // Simplified
-              if (line.trim() === '') return <br key={i} />;
-              return <p key={i}>{line}</p>;
-            })}
-          </div>
+          <div
+            className="prose prose-invert max-w-none font-body"
+            dangerouslySetInnerHTML={{ __html: journal.rendered_html }}
+          />
         </CardContent>
-        <CardFooter>
+        <CardFooter className='flex-col items-start gap-4'>
           <Button onClick={handleGenerateSummary}>
             <Wand2 className="mr-2 h-4 w-4" />
             Generate AI Summary
           </Button>
+          {journal.links.length > 0 && (
+            <div>
+              <h4 className='font-semibold mb-2'>Chart Links:</h4>
+              <div className='flex flex-col gap-2'>
+              {journal.links.map((link, i) => (
+                <Button asChild variant="link" className="p-0 h-auto justify-start" key={i}>
+                  <Link href={link} target="_blank">
+                    <LinkIcon className="mr-2 h-4 w-4" />
+                    {link}
+                  </Link>
+                </Button>
+              ))}
+              </div>
+            </div>
+          )}
         </CardFooter>
       </Card>
       <Dialog open={isSummaryOpen} onOpenChange={setIsSummaryOpen}>

@@ -1,3 +1,5 @@
+'use client'
+
 import {
   Card,
   CardContent,
@@ -5,22 +7,40 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card';
-import { journalEntries } from '@/lib/mock-data';
-import { notFound } from 'next/navigation';
+import { notFound, useParams } from 'next/navigation';
+import { useEffect, useState } from 'react';
+import { Skeleton } from '@/components/ui/skeleton';
 
-export default function MonthlyJournalPage({ params }: { params: { month: string } }) {
-  const entry = journalEntries.find(
-    (e) => e.type === 'monthly' && e.path.endsWith(params.month)
-  );
+export default function MonthlyJournalPage() {
+  const params = useParams<{ month: string }>();
+  const [journal, setJournal] = useState<{ rendered_html: string } | null>(null);
+  const [loadingJournal, setLoadingJournal] = useState(true);
 
-  if (!entry) {
+  useEffect(() => {
+    if (!params.month) return;
+    setLoadingJournal(true);
+    fetch(`/api/journal/m/${params.month}`)
+      .then(res => {
+        if (!res.ok) throw new Error('not found');
+        return res.json();
+      })
+      .then(data => setJournal(data))
+      .catch(() => setJournal(null))
+      .finally(() => setLoadingJournal(false));
+  }, [params.month]);
+
+  if (loadingJournal) {
+    return <Skeleton className="h-96 w-full" />;
+  }
+
+  if (!journal) {
     notFound();
   }
 
   return (
     <div className="space-y-6">
       <header>
-        <h1 className="text-3xl font-bold font-headline tracking-tight">{entry.title}</h1>
+        <h1 className="text-3xl font-bold font-headline tracking-tight">Monthly Journal: {params.month}</h1>
         <p className="text-muted-foreground">Month: {params.month}</p>
       </header>
       <Card>
@@ -31,24 +51,10 @@ export default function MonthlyJournalPage({ params }: { params: { month: string
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="prose prose-invert max-w-none font-body">
-             <style jsx global>{`
-              .prose h2 { @apply text-2xl font-bold mt-8 mb-4 font-headline; }
-              .prose h3 { @apply text-xl font-bold mt-6 mb-3 font-headline; }
-              .prose p { @apply leading-relaxed mb-4; }
-              .prose ul { @apply list-disc pl-5 mb-4; }
-              .prose code { @apply bg-muted text-foreground px-1 py-0.5 rounded font-code; }
-              .prose blockquote { @apply border-l-4 border-primary pl-4 italic text-muted-foreground; }
-            `}</style>
-             {entry.content.split('\n').map((line, i) => {
-              if (line.startsWith('## ')) return <h2 key={i}>{line.substring(3)}</h2>;
-              if (line.startsWith('### ')) return <h3 key={i}>{line.substring(4)}</h3>;
-              if (line.startsWith('> ')) return <blockquote key={i}>{line.substring(2)}</blockquote>;
-              if (line.startsWith('- ')) return <ul key={i}><li>{line.substring(2)}</li></ul>;
-              if (line.trim() === '') return <br key={i} />;
-              return <p key={i}>{line}</p>;
-            })}
-          </div>
+          <div
+            className="prose prose-invert max-w-none font-body"
+            dangerouslySetInnerHTML={{ __html: journal.rendered_html }}
+           />
         </CardContent>
       </Card>
     </div>
